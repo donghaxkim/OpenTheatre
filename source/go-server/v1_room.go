@@ -93,3 +93,85 @@ type V1ChatMessage struct {
 	Text      string `json:"text"`
 	Timestamp int64  `json:"timestamp"`
 }
+
+// initMembers lazily creates the members map.
+func (r *V1Room) initMembers() {
+	if r.members == nil {
+		r.members = make(map[string]*memberEntry)
+	}
+}
+
+// AddMember registers a new connection for the given member. New members get
+// JoinedAt stamped. Idempotent across reconnects (multi-tab).
+func (r *V1Room) AddMember(m V1Member) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.initMembers()
+	if entry, ok := r.members[m.Id]; ok {
+		entry.conns++
+		return
+	}
+	if m.JoinedAt == 0 {
+		m.JoinedAt = time.Now().UnixMilli()
+	}
+	r.members[m.Id] = &memberEntry{member: m, conns: 1}
+}
+
+// RemoveMember decrements the connection count and removes the member if it
+// hits zero. Returns true if the member was removed (last connection closed).
+func (r *V1Room) RemoveMember(memberId string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.initMembers()
+	entry, ok := r.members[memberId]
+	if !ok {
+		return false
+	}
+	entry.conns--
+	if entry.conns <= 0 {
+		delete(r.members, memberId)
+		return true
+	}
+	return false
+}
+
+// GetMember returns the member with the given id and whether it exists.
+func (r *V1Room) GetMember(memberId string) (V1Member, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	r.initMembers()
+	entry, ok := r.members[memberId]
+	if !ok {
+		return V1Member{}, false
+	}
+	return entry.member, true
+}
+
+// MemberCount returns the number of distinct members (not connections).
+func (r *V1Room) MemberCount() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return len(r.members)
+}
+
+// ConnectionCount returns the number of open WS connections for memberId.
+func (r *V1Room) ConnectionCount(memberId string) int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	r.initMembers()
+	if entry, ok := r.members[memberId]; ok {
+		return entry.conns
+	}
+	return 0
+}
+
+// MemberList returns a snapshot of all members. Order is not guaranteed.
+func (r *V1Room) MemberList() []V1Member {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]V1Member, 0, len(r.members))
+	for _, entry := range r.members {
+		out = append(out, entry.member)
+	}
+	return out
+}

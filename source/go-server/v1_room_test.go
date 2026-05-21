@@ -69,4 +69,43 @@ var _ = Describe("V1Room", func() {
 			Expect(room.UpdateSettings("m_bob", V1SettingsPatch{ControlMode: "host-only"})).To(MatchError("not host"))
 		})
 	})
+
+	Describe("AddMember / RemoveMember", func() {
+		It("AddMember stores the member by id", func() {
+			room := NewV1Room("B3K7M9", "n", "m_alex")
+			room.AddMember(V1Member{Id: "m_alex", DisplayName: "Alex", AvatarColor: "#ff6b9d"})
+			m, ok := room.GetMember("m_alex")
+			Expect(ok).To(BeTrue())
+			Expect(m.DisplayName).To(Equal("Alex"))
+		})
+
+		It("AddMember twice with the same id increments connection count, not member count", func() {
+			room := NewV1Room("B3K7M9", "n", "m_alex")
+			room.AddMember(V1Member{Id: "m_alex", DisplayName: "Alex"})
+			room.AddMember(V1Member{Id: "m_alex", DisplayName: "Alex"})
+			Expect(room.MemberCount()).To(Equal(1))
+			Expect(room.ConnectionCount("m_alex")).To(Equal(2))
+		})
+
+		It("RemoveMember decrements connection count; member stays until last", func() {
+			room := NewV1Room("B3K7M9", "n", "m_alex")
+			room.AddMember(V1Member{Id: "m_alex"})
+			room.AddMember(V1Member{Id: "m_alex"})
+			Expect(room.RemoveMember("m_alex")).To(BeFalse())
+			Expect(room.ConnectionCount("m_alex")).To(Equal(1))
+			Expect(room.RemoveMember("m_alex")).To(BeTrue())
+			Expect(room.MemberCount()).To(Equal(0))
+		})
+
+		It("MemberList returns a snapshot of all members", func() {
+			room := NewV1Room("B3K7M9", "n", "m_alex")
+			room.AddMember(V1Member{Id: "m_alex"})
+			room.AddMember(V1Member{Id: "m_bob"})
+			ids := []string{}
+			for _, m := range room.MemberList() {
+				ids = append(ids, m.Id)
+			}
+			Expect(ids).To(ConsistOf("m_alex", "m_bob"))
+		})
+	})
 })

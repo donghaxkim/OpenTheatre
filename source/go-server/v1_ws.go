@@ -138,6 +138,11 @@ func (c *v1WsClient) readPump() {
 		c.hub.unregister(c)
 		c.conn.Close()
 		c.hub.onClientGone(c)
+		// Close the send channel so writePump's range loop exits instead of
+		// blocking forever. Safe here: unregister already removed c from the
+		// hub under h.mu, so no broadcaster can still hold a reference to it,
+		// and sendEnvelope only runs on this (now-exiting) goroutine.
+		close(c.send)
 	}()
 	for {
 		_, raw, err := c.conn.ReadMessage()

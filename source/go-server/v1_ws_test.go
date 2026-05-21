@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"strings"
 	"time"
 
@@ -317,6 +318,34 @@ var _ = Describe("V1 WebSocket", func() {
 			time.Sleep(120 * time.Millisecond)
 			_, ok := v1Srv.GetRoom(room.Id)
 			Expect(ok).To(BeTrue())
+		})
+	})
+
+	Describe("connection cleanup", func() {
+		It("does not leak goroutines when clients connect then disconnect", func() {
+			// A connect+join+disconnect cycle spawns a readPump and a
+			// writePump goroutine. If the send channel is never closed,
+			// writePump blocks on `range c.send` forever after the socket
+			// closes — one leaked goroutine per quiet disconnect.
+			runtime.GC()
+			time.Sleep(50 * time.Millisecond)
+			before := runtime.NumGoroutine()
+
+			for i := 0; i < 20; i++ {
+				conn, err := dialV1Ws(srv.URL, room.Id)
+				Expect(err).ToNot(HaveOccurred())
+				conn.WriteMessage(websocket.TextMessage, []byte(
+					`{"type":"join","data":{"member":{"id":"m_alex","displayName":"Alex"}}}`))
+				readV1Msg(conn) // room-state
+				conn.Close()
+			}
+
+			// Give readPump/writePump goroutines time to observe the close
+			// and exit. With the leak they never exit.
+			Eventually(func() int {
+				runtime.GC()
+				return runtime.NumGoroutine()
+			}, 3*time.Second, 100*time.Millisecond).Should(BeNumerically("<=", before+5))
 		})
 	})
 })

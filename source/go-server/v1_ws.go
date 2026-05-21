@@ -151,6 +151,10 @@ func (c *v1WsClient) readPump() {
 			c.handleTypingStop()
 		case "reaction-burst":
 			c.handleReactionBurst(env.Data)
+		case "settings-update":
+			c.handleSettingsUpdate(env.Data)
+		case "rename-room":
+			c.handleRenameRoom(env.Data)
 		}
 	}
 }
@@ -385,4 +389,47 @@ func (c *v1WsClient) handleReactionBurst(data json.RawMessage) {
 		"memberId": c.memberId,
 		"emoji":    payload.Emoji,
 	})
+}
+
+// handleSettingsUpdate applies a host-only settings patch and broadcasts it.
+func (c *v1WsClient) handleSettingsUpdate(data json.RawMessage) {
+	if c.memberId == "" {
+		return
+	}
+	var patch V1SettingsPatch
+	if err := json.Unmarshal(data, &patch); err != nil {
+		return
+	}
+	room, ok := c.hub.v1Srv.GetRoom(c.roomId)
+	if !ok {
+		return
+	}
+	if err := room.UpdateSettings(c.memberId, patch); err != nil {
+		return // non-host or invalid value — drop silently
+	}
+	c.hub.broadcastAll(c.roomId, "settings-updated", patch)
+}
+
+// handleRenameRoom applies a host-only rename and broadcasts it.
+func (c *v1WsClient) handleRenameRoom(data json.RawMessage) {
+	if c.memberId == "" {
+		return
+	}
+	var payload struct {
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return
+	}
+	if payload.Name == "" {
+		return
+	}
+	room, ok := c.hub.v1Srv.GetRoom(c.roomId)
+	if !ok {
+		return
+	}
+	if err := room.Rename(c.memberId, payload.Name); err != nil {
+		return
+	}
+	c.hub.broadcastAll(c.roomId, "room-renamed", map[string]any{"name": payload.Name})
 }

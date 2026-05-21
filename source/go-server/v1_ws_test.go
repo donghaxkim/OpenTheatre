@@ -217,4 +217,63 @@ var _ = Describe("V1 WebSocket", func() {
 			Expect(data["emoji"]).To(Equal("🔥"))
 		})
 	})
+
+	Describe("settings-update (host-only)", func() {
+		It("accepts the patch from host and broadcasts settings-updated", func() {
+			conn1, _ := dialV1Ws(srv.URL, room.Id)
+			defer conn1.Close()
+			conn1.WriteMessage(websocket.TextMessage, []byte(
+				`{"type":"join","data":{"member":{"id":"m_alex","displayName":"Alex"}}}`))
+			readV1Msg(conn1)
+
+			conn1.WriteMessage(websocket.TextMessage, []byte(
+				`{"type":"settings-update","data":{"controlMode":"host-only"}}`))
+
+			msg, err := readV1Msg(conn1)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(msg["type"]).To(Equal("settings-updated"))
+			Expect(msg["data"].(map[string]any)["controlMode"]).To(Equal("host-only"))
+
+			updated, _ := v1Srv.GetRoom(room.Id)
+			Expect(updated.ControlMode).To(Equal("host-only"))
+		})
+
+		It("rejects settings-update from a non-host (no broadcast, no change)", func() {
+			conn1, _ := dialV1Ws(srv.URL, room.Id)
+			defer conn1.Close()
+			conn1.WriteMessage(websocket.TextMessage, []byte(
+				`{"type":"join","data":{"member":{"id":"m_bob","displayName":"Bob"}}}`))
+			readV1Msg(conn1)
+
+			conn1.WriteMessage(websocket.TextMessage, []byte(
+				`{"type":"settings-update","data":{"controlMode":"host-only"}}`))
+
+			conn1.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
+			_, _, err := conn1.ReadMessage()
+			Expect(err).To(HaveOccurred())
+
+			updated, _ := v1Srv.GetRoom(room.Id)
+			Expect(updated.ControlMode).To(Equal("democratic"))
+		})
+	})
+
+	Describe("rename-room (host-only)", func() {
+		It("renames and broadcasts room-renamed when host", func() {
+			conn1, _ := dialV1Ws(srv.URL, room.Id)
+			defer conn1.Close()
+			conn1.WriteMessage(websocket.TextMessage, []byte(
+				`{"type":"join","data":{"member":{"id":"m_alex","displayName":"Alex"}}}`))
+			readV1Msg(conn1)
+
+			conn1.WriteMessage(websocket.TextMessage, []byte(
+				`{"type":"rename-room","data":{"name":"Pizza & a movie"}}`))
+
+			msg, _ := readV1Msg(conn1)
+			Expect(msg["type"]).To(Equal("room-renamed"))
+			Expect(msg["data"].(map[string]any)["name"]).To(Equal("Pizza & a movie"))
+
+			updated, _ := v1Srv.GetRoom(room.Id)
+			Expect(updated.Name).To(Equal("Pizza & a movie"))
+		})
+	})
 })

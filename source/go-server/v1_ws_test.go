@@ -145,4 +145,49 @@ var _ = Describe("V1 WebSocket", func() {
 			Expect(echoed["type"]).To(Equal("chat"))
 		})
 	})
+
+	Describe("typing indicators", func() {
+		It("broadcasts typing-start to other clients", func() {
+			conn1, _ := dialV1Ws(srv.URL, room.Id)
+			defer conn1.Close()
+			conn1.WriteMessage(websocket.TextMessage, []byte(
+				`{"type":"join","data":{"member":{"id":"m_alex","displayName":"Alex"}}}`))
+			readV1Msg(conn1)
+
+			conn2, _ := dialV1Ws(srv.URL, room.Id)
+			defer conn2.Close()
+			conn2.WriteMessage(websocket.TextMessage, []byte(
+				`{"type":"join","data":{"member":{"id":"m_bob","displayName":"Bob"}}}`))
+			readV1Msg(conn2)
+			readV1Msg(conn1) // member-joined
+
+			conn1.WriteMessage(websocket.TextMessage, []byte(`{"type":"typing-start"}`))
+			msg, err := readV1Msg(conn2)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(msg["type"]).To(Equal("typing-start"))
+			Expect(msg["data"].(map[string]any)["memberId"]).To(Equal("m_alex"))
+		})
+
+		It("broadcasts typing-stop to other clients", func() {
+			conn1, _ := dialV1Ws(srv.URL, room.Id)
+			defer conn1.Close()
+			conn1.WriteMessage(websocket.TextMessage, []byte(
+				`{"type":"join","data":{"member":{"id":"m_alex","displayName":"Alex"}}}`))
+			readV1Msg(conn1)
+
+			conn2, _ := dialV1Ws(srv.URL, room.Id)
+			defer conn2.Close()
+			conn2.WriteMessage(websocket.TextMessage, []byte(
+				`{"type":"join","data":{"member":{"id":"m_bob","displayName":"Bob"}}}`))
+			readV1Msg(conn2)
+			readV1Msg(conn1)
+
+			conn1.WriteMessage(websocket.TextMessage, []byte(`{"type":"typing-start"}`))
+			readV1Msg(conn2) // typing-start
+
+			conn1.WriteMessage(websocket.TextMessage, []byte(`{"type":"typing-stop"}`))
+			msg, _ := readV1Msg(conn2)
+			Expect(msg["type"]).To(Equal("typing-stop"))
+		})
+	})
 })

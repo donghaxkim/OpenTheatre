@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -39,6 +40,7 @@ type v1WsHub struct {
 
 	mu            sync.RWMutex
 	clientsByRoom map[string]map[*v1WsClient]struct{}
+	typingTimers  map[typingTimerKey]*time.Timer
 }
 
 func newV1WsHub(v1Srv *V1Service) *v1WsHub {
@@ -143,6 +145,10 @@ func (c *v1WsClient) readPump() {
 			c.handleJoin(env.Data)
 		case "chat":
 			c.handleChat(env.Data)
+		case "typing-start":
+			c.handleTypingStart()
+		case "typing-stop":
+			c.handleTypingStop()
 		}
 	}
 }
@@ -301,4 +307,60 @@ func (c *v1WsClient) handleChat(data json.RawMessage) {
 	}
 	msg := room.AppendChat(c.memberId, payload.Text)
 	c.hub.broadcastAll(c.roomId, "chat", map[string]any{"message": msg})
+}
+
+// v1TypingExpireAfter is how long after typing-start the server auto-emits
+// typing-stop if no explicit stop arrives.
+const v1TypingExpireAfter = 5 * time.Second
+
+// typingTimerKey identifies a per-room-per-member typing-stop timer.
+type typingTimerKey struct {
+	roomId   string
+	memberId string
+}
+
+func (c *v1WsClient) handleTypingStart() {
+	if c.memberId == "" {
+		return
+	}
+	c.hub.broadcastExcept(c.roomId, c, "typing-start", map[string]any{"memberId": c.memberId})
+	c.hub.armTypingExpire(c.roomId, c.memberId)
+}
+
+func (c *v1WsClient) handleTypingStop() {
+	if c.memberId == "" {
+		return
+	}
+	c.hub.cancelTypingExpire(c.roomId, c.memberId)
+	c.hub.broadcastExcept(c.roomId, c, "typing-stop", map[string]any{"memberId": c.memberId})
+}
+
+// armTypingExpire (re)starts the 5s auto-stop timer for (roomId, memberId).
+func (h *v1WsHub) armTypingExpire(roomId, memberId string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.typingTimers == nil {
+		h.typingTimers = make(map[typingTimerKey]*time.Timer)
+	}
+	key := typingTimerKey{roomId, memberId}
+	if t, ok := h.typingTimers[key]; ok {
+		t.Stop()
+	}
+	h.typingTimers[key] = time.AfterFunc(v1TypingExpireAfter, func() {
+		h.mu.Lock()
+		delete(h.typingTimers, key)
+		h.mu.Unlock()
+		h.broadcastAll(roomId, "typing-stop", map[string]any{"memberId": memberId})
+	})
+}
+
+// cancelTypingExpire stops any pending typing-stop timer for (roomId, memberId).
+func (h *v1WsHub) cancelTypingExpire(roomId, memberId string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	key := typingTimerKey{roomId, memberId}
+	if t, ok := h.typingTimers[key]; ok {
+		t.Stop()
+		delete(h.typingTimers, key)
+	}
 }

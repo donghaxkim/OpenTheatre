@@ -66,7 +66,11 @@ func (s *OpenTheatreService) Timestamp() float64 {
 func (s *OpenTheatreService) LoadConfiguration() {
 	configStr, err := os.ReadFile("./config.json")
 	if err != nil {
-		log.Panic("Error when opening file: ", err)
+		// config.json is optional: it holds environment-specific values
+		// (sponsors, block domains, legacy tokens). When absent — fresh
+		// clones, CI, the test suite — fall back to an empty Configuration
+		// rather than crashing the whole server.
+		log.Println("config.json not found, using empty configuration:", err)
 		return
 	}
 	type ConfigRaw struct {

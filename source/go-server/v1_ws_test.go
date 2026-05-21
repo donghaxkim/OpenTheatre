@@ -77,4 +77,41 @@ var _ = Describe("V1 WebSocket", func() {
 			Expect(err).ToNot(HaveOccurred())
 		})
 	})
+
+	Describe("join message", func() {
+		It("returns room-state with the member included", func() {
+			conn, _ := dialV1Ws(srv.URL, room.Id)
+			defer conn.Close()
+			conn.WriteMessage(websocket.TextMessage, []byte(
+				`{"type":"join","data":{"member":{"id":"m_alex","displayName":"Alex","avatarColor":"#ff6b9d"}}}`))
+
+			msg, err := readV1Msg(conn)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(msg["type"]).To(Equal("room-state"))
+			data := msg["data"].(map[string]any)
+			Expect(data["id"]).To(Equal(room.Id))
+			members := data["members"].([]any)
+			Expect(members).To(HaveLen(1))
+			Expect(members[0].(map[string]any)["id"]).To(Equal("m_alex"))
+		})
+
+		It("broadcasts member-joined to other clients", func() {
+			conn1, _ := dialV1Ws(srv.URL, room.Id)
+			defer conn1.Close()
+			conn1.WriteMessage(websocket.TextMessage, []byte(
+				`{"type":"join","data":{"member":{"id":"m_alex","displayName":"Alex"}}}`))
+			readV1Msg(conn1) // room-state
+
+			conn2, _ := dialV1Ws(srv.URL, room.Id)
+			defer conn2.Close()
+			conn2.WriteMessage(websocket.TextMessage, []byte(
+				`{"type":"join","data":{"member":{"id":"m_bob","displayName":"Bob"}}}`))
+
+			msg, err := readV1Msg(conn1)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(msg["type"]).To(Equal("member-joined"))
+			data := msg["data"].(map[string]any)
+			Expect(data["member"].(map[string]any)["id"]).To(Equal("m_bob"))
+		})
+	})
 })

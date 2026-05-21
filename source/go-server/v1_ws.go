@@ -122,11 +122,12 @@ func (h *slashFix) handleV1Ws(w http.ResponseWriter, r *http.Request) {
 	go client.readPump()
 }
 
-// readPump reads + dispatches messages. Per-type handlers added in later tasks.
+// readPump reads + dispatches messages.
 func (c *v1WsClient) readPump() {
 	defer func() {
 		c.hub.unregister(c)
 		c.conn.Close()
+		c.hub.onClientGone(c)
 	}()
 	for {
 		_, raw, err := c.conn.ReadMessage()
@@ -138,7 +139,8 @@ func (c *v1WsClient) readPump() {
 			continue
 		}
 		switch env.Type {
-		// Per-type cases added in Tasks 9-13.
+		case "join":
+			c.handleJoin(env.Data)
 		}
 	}
 }
@@ -151,5 +153,127 @@ func (c *v1WsClient) writePump() {
 			log.Println("v1 ws write error:", err)
 			return
 		}
+	}
+}
+
+// handleJoin registers the member, sends room-state to this client, and
+// broadcasts member-joined to others.
+func (c *v1WsClient) handleJoin(data json.RawMessage) {
+	var payload struct {
+		Member V1Member `json:"member"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return
+	}
+	if payload.Member.Id == "" {
+		return
+	}
+	room, ok := c.hub.v1Srv.GetRoom(c.roomId)
+	if !ok {
+		return
+	}
+	c.memberId = payload.Member.Id
+	wasNew := room.ConnectionCount(payload.Member.Id) == 0
+	room.AddMember(payload.Member)
+
+	c.sendEnvelope("room-state", buildRoomStateSnapshot(room))
+
+	if wasNew {
+		c.hub.broadcastExcept(c.roomId, c, "member-joined", map[string]any{
+			"member": payload.Member,
+		})
+	}
+}
+
+// v1RoomStateSnapshot is the payload of a room-state message.
+type v1RoomStateSnapshot struct {
+	Id          string          `json:"id"`
+	Name        string          `json:"name"`
+	HostId      string          `json:"hostId"`
+	ControlMode string          `json:"controlMode"`
+	UrlSyncMode string          `json:"urlSyncMode"`
+	Members     []V1Member      `json:"members"`
+	ChatHistory []V1ChatMessage `json:"chatHistory"`
+}
+
+func buildRoomStateSnapshot(r *V1Room) v1RoomStateSnapshot {
+	return v1RoomStateSnapshot{
+		Id:          r.Id,
+		Name:        r.Name,
+		HostId:      r.HostId,
+		ControlMode: r.ControlMode,
+		UrlSyncMode: r.UrlSyncMode,
+		Members:     r.MemberList(),
+		ChatHistory: r.ChatHistory(),
+	}
+}
+
+// sendEnvelope marshals and queues an envelope for this client only.
+func (c *v1WsClient) sendEnvelope(msgType string, data any) {
+	rawData, err := json.Marshal(data)
+	if err != nil {
+		return
+	}
+	payload, err := json.Marshal(V1WsEnvelope{Type: msgType, Data: rawData})
+	if err != nil {
+		return
+	}
+	select {
+	case c.send <- payload:
+	default:
+	}
+}
+
+// broadcastExcept fans data out to every client in roomId except skip.
+func (h *v1WsHub) broadcastExcept(roomId string, skip *v1WsClient, msgType string, data any) {
+	rawData, err := json.Marshal(data)
+	if err != nil {
+		return
+	}
+	payload, err := json.Marshal(V1WsEnvelope{Type: msgType, Data: rawData})
+	if err != nil {
+		return
+	}
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for client := range h.clientsByRoom[roomId] {
+		if client == skip {
+			continue
+		}
+		select {
+		case client.send <- payload:
+		default:
+		}
+	}
+}
+
+// broadcastAll fans data out to every client in roomId, including the sender.
+func (h *v1WsHub) broadcastAll(roomId string, msgType string, data any) {
+	rawData, err := json.Marshal(data)
+	if err != nil {
+		return
+	}
+	payload, err := json.Marshal(V1WsEnvelope{Type: msgType, Data: rawData})
+	if err != nil {
+		return
+	}
+	h.broadcast(roomId, payload)
+}
+
+// onClientGone is invoked from readPump's defer after the connection closes.
+// Removes the member; broadcasts member-left when their last connection went.
+// Task 14 extends this with the reconnect-grace teardown.
+func (h *v1WsHub) onClientGone(c *v1WsClient) {
+	if c.memberId == "" {
+		return
+	}
+	room, ok := h.v1Srv.GetRoom(c.roomId)
+	if !ok {
+		return
+	}
+	if last := room.RemoveMember(c.memberId); last {
+		h.broadcastExcept(c.roomId, c, "member-left", map[string]any{
+			"memberId": c.memberId,
+		})
 	}
 }

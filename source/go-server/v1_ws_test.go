@@ -276,4 +276,47 @@ var _ = Describe("V1 WebSocket", func() {
 			Expect(updated.Name).To(Equal("Pizza & a movie"))
 		})
 	})
+
+	Describe("room teardown grace window", func() {
+		BeforeEach(func() {
+			V1ReconnectGrace = 100 * time.Millisecond // test-only short window
+		})
+		AfterEach(func() {
+			V1ReconnectGrace = 30 * time.Second
+		})
+
+		It("deletes the room after grace elapses with no reconnects", func() {
+			conn, _ := dialV1Ws(srv.URL, room.Id)
+			conn.WriteMessage(websocket.TextMessage, []byte(
+				`{"type":"join","data":{"member":{"id":"m_alex","displayName":"Alex"}}}`))
+			readV1Msg(conn)
+			conn.Close()
+
+			Eventually(func() bool {
+				_, ok := v1Srv.GetRoom(room.Id)
+				return ok
+			}, 500*time.Millisecond, 20*time.Millisecond).Should(BeFalse())
+		})
+
+		It("keeps the room if someone reconnects within the grace", func() {
+			conn1, _ := dialV1Ws(srv.URL, room.Id)
+			conn1.WriteMessage(websocket.TextMessage, []byte(
+				`{"type":"join","data":{"member":{"id":"m_alex","displayName":"Alex"}}}`))
+			readV1Msg(conn1)
+			conn1.Close()
+
+			time.Sleep(50 * time.Millisecond)
+			conn2, err := dialV1Ws(srv.URL, room.Id)
+			Expect(err).ToNot(HaveOccurred())
+			defer conn2.Close()
+			conn2.WriteMessage(websocket.TextMessage, []byte(
+				`{"type":"join","data":{"member":{"id":"m_alex","displayName":"Alex"}}}`))
+			_, err = readV1Msg(conn2)
+			Expect(err).ToNot(HaveOccurred())
+
+			time.Sleep(120 * time.Millisecond)
+			_, ok := v1Srv.GetRoom(room.Id)
+			Expect(ok).To(BeTrue())
+		})
+	})
 })

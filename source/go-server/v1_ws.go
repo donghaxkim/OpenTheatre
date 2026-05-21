@@ -19,6 +19,10 @@ var v1Upgrader = websocket.Upgrader{
 	CheckOrigin:     func(r *http.Request) bool { return true },
 }
 
+// V1ReconnectGrace is how long an empty room survives waiting for a reconnect.
+// A var (not const) so tests can shorten it.
+var V1ReconnectGrace = 30 * time.Second
+
 // V1WsEnvelope is the JSON wrapper for every WS message in either direction.
 type V1WsEnvelope struct {
 	Type string          `json:"type"`
@@ -27,20 +31,22 @@ type V1WsEnvelope struct {
 
 // v1WsClient is one open WebSocket connection.
 type v1WsClient struct {
-	hub      *v1WsHub
-	conn     *websocket.Conn
-	roomId   string
-	memberId string // set after a "join" message
-	send     chan []byte
+	hub            *v1WsHub
+	conn           *websocket.Conn
+	roomId         string
+	memberId       string // set after a "join" message
+	send           chan []byte
+	reconnectGrace time.Duration // snapshotted from V1ReconnectGrace at dial time
 }
 
 // v1WsHub fans out messages within rooms.
 type v1WsHub struct {
 	v1Srv *V1Service
 
-	mu            sync.RWMutex
-	clientsByRoom map[string]map[*v1WsClient]struct{}
-	typingTimers  map[typingTimerKey]*time.Timer
+	mu             sync.RWMutex
+	clientsByRoom  map[string]map[*v1WsClient]struct{}
+	typingTimers   map[typingTimerKey]*time.Timer
+	teardownTimers map[string]*time.Timer
 }
 
 func newV1WsHub(v1Srv *V1Service) *v1WsHub {
@@ -53,6 +59,7 @@ func newV1WsHub(v1Srv *V1Service) *v1WsHub {
 func (h *v1WsHub) register(c *v1WsClient) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	h.cancelTeardown(c.roomId)
 	set, ok := h.clientsByRoom[c.roomId]
 	if !ok {
 		set = make(map[*v1WsClient]struct{})
@@ -113,10 +120,11 @@ func (h *slashFix) handleV1Ws(w http.ResponseWriter, r *http.Request) {
 
 	hub := h.ensureV1WsHub()
 	client := &v1WsClient{
-		hub:    hub,
-		conn:   conn,
-		roomId: roomId,
-		send:   make(chan []byte, 32),
+		hub:            hub,
+		conn:           conn,
+		roomId:         roomId,
+		send:           make(chan []byte, 32),
+		reconnectGrace: V1ReconnectGrace, // snapshot so background goroutines don't race on the global
 	}
 	hub.register(client)
 
@@ -276,19 +284,21 @@ func (h *v1WsHub) broadcastAll(roomId string, msgType string, data any) {
 
 // onClientGone is invoked from readPump's defer after the connection closes.
 // Removes the member; broadcasts member-left when their last connection went.
-// Task 14 extends this with the reconnect-grace teardown.
+// Arms the reconnect-grace teardown timer when the room becomes empty.
 func (h *v1WsHub) onClientGone(c *v1WsClient) {
-	if c.memberId == "" {
-		return
+	if c.memberId != "" {
+		if room, ok := h.v1Srv.GetRoom(c.roomId); ok {
+			if last := room.RemoveMember(c.memberId); last {
+				h.broadcastExcept(c.roomId, c, "member-left", map[string]any{
+					"memberId": c.memberId,
+				})
+			}
+		}
 	}
-	room, ok := h.v1Srv.GetRoom(c.roomId)
-	if !ok {
-		return
-	}
-	if last := room.RemoveMember(c.memberId); last {
-		h.broadcastExcept(c.roomId, c, "member-left", map[string]any{
-			"memberId": c.memberId,
-		})
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if len(h.clientsByRoom[c.roomId]) == 0 {
+		h.armTeardown(c.roomId, c.reconnectGrace)
 	}
 }
 
@@ -432,4 +442,33 @@ func (c *v1WsClient) handleRenameRoom(data json.RawMessage) {
 		return
 	}
 	c.hub.broadcastAll(c.roomId, "room-renamed", map[string]any{"name": payload.Name})
+}
+
+// armTeardown (re)starts the deletion timer for roomId. Called under h.mu.
+// grace is snapshotted by the caller (from the request-handling goroutine)
+// so background timer goroutines never race against test mutations of V1ReconnectGrace.
+func (h *v1WsHub) armTeardown(roomId string, grace time.Duration) {
+	if h.teardownTimers == nil {
+		h.teardownTimers = make(map[string]*time.Timer)
+	}
+	if t, ok := h.teardownTimers[roomId]; ok {
+		t.Stop()
+	}
+	h.teardownTimers[roomId] = time.AfterFunc(grace, func() {
+		h.mu.Lock()
+		delete(h.teardownTimers, roomId)
+		stillEmpty := len(h.clientsByRoom[roomId]) == 0
+		h.mu.Unlock()
+		if stillEmpty {
+			h.v1Srv.DeleteRoom(roomId)
+		}
+	})
+}
+
+// cancelTeardown stops a pending teardown for roomId. Called under h.mu.
+func (h *v1WsHub) cancelTeardown(roomId string) {
+	if t, ok := h.teardownTimers[roomId]; ok {
+		t.Stop()
+		delete(h.teardownTimers, roomId)
+	}
 }

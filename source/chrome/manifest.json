@@ -1,0 +1,65 @@
+{
+    "name": "OpenTheatre",
+    "description": "Watch videos together with friends on any site",
+    "version": "3.0.23",
+    "manifest_version": 3,
+    "content_scripts": [
+        {
+            "matches": [
+                "<all_urls>"
+            ],
+            "js": [
+                "extension.chrome.user.js"
+            ],
+            "all_frames": true
+        },
+        {
+            "matches": [
+                "<all_urls>"
+            ],
+            "js": [
+                "pre.js"
+            ],
+            "run_at": "document_start",
+            "all_frames": true
+        },
+        {
+            "matches": [
+                "<all_urls>"
+            ],
+            "js": [
+                "preInjected.js"
+            ],
+            "run_at": "document_start",
+            "all_frames": true,
+            "world": "MAIN"
+        }
+    ],
+    "web_accessible_resources": [
+        {
+            "resources": [
+                "vt.en-us.user.js",
+                "vt.zh-cn.user.js",
+                "vt.ja-jp.user.js",
+                "preInjected.js"
+            ],
+            "matches": [
+                "<all_urls>"
+            ]
+        }
+    ],
+    "background": {
+        "service_worker": "background.chrome.js",
+        "mode": "module"
+    },
+    "icons": {
+        "192": "./icon/android-icon-192x192.png"
+    },
+    "permissions": [
+        "storage",
+        "unlimitedStorage"
+    ],
+    "action": {
+        "default_popup": "popup.html"
+    }
+}

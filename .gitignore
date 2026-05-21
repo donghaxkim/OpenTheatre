@@ -1,0 +1,12 @@
+*.pem
+.DS_Store
+node_modules
+chrome.zip
+xcuserdata/
+*.zip
+
+# Local dev notes / AI workflow — not for public repo
+CLAUDE.md
+MEMORY.md
+ERRORS.md
+docs/superpowers/

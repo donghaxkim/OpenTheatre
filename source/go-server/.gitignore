@@ -1,0 +1,11 @@
+.idea
+coverprofile.out
+server.log
+sponsor.json
+main
+OpenTheatre
+*.exe
+admin_password.txt
+private.pem
+certificate.crt
+.vscode

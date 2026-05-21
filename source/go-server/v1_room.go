@@ -36,6 +36,7 @@ func NewV1Room(id, name, hostId string) *V1Room {
 		ControlMode: "democratic",
 		UrlSyncMode: "ask",
 		CreatedAt:   time.Now().UnixMilli(),
+		members:     make(map[string]*memberEntry),
 	}
 }
 
@@ -94,19 +95,11 @@ type V1ChatMessage struct {
 	Timestamp int64  `json:"timestamp"`
 }
 
-// initMembers lazily creates the members map.
-func (r *V1Room) initMembers() {
-	if r.members == nil {
-		r.members = make(map[string]*memberEntry)
-	}
-}
-
 // AddMember registers a new connection for the given member. New members get
 // JoinedAt stamped. Idempotent across reconnects (multi-tab).
 func (r *V1Room) AddMember(m V1Member) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.initMembers()
 	if entry, ok := r.members[m.Id]; ok {
 		entry.conns++
 		return
@@ -122,7 +115,6 @@ func (r *V1Room) AddMember(m V1Member) {
 func (r *V1Room) RemoveMember(memberId string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.initMembers()
 	entry, ok := r.members[memberId]
 	if !ok {
 		return false
@@ -139,7 +131,6 @@ func (r *V1Room) RemoveMember(memberId string) bool {
 func (r *V1Room) GetMember(memberId string) (V1Member, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	r.initMembers()
 	entry, ok := r.members[memberId]
 	if !ok {
 		return V1Member{}, false
@@ -158,7 +149,6 @@ func (r *V1Room) MemberCount() int {
 func (r *V1Room) ConnectionCount(memberId string) int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	r.initMembers()
 	if entry, ok := r.members[memberId]; ok {
 		return entry.conns
 	}

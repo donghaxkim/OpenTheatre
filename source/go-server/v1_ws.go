@@ -149,6 +149,8 @@ func (c *v1WsClient) readPump() {
 			c.handleTypingStart()
 		case "typing-stop":
 			c.handleTypingStop()
+		case "reaction-burst":
+			c.handleReactionBurst(env.Data)
 		}
 	}
 }
@@ -363,4 +365,24 @@ func (h *v1WsHub) cancelTypingExpire(roomId, memberId string) {
 		t.Stop()
 		delete(h.typingTimers, key)
 	}
+}
+
+// handleReactionBurst broadcasts an ephemeral emoji burst to the whole room.
+func (c *v1WsClient) handleReactionBurst(data json.RawMessage) {
+	if c.memberId == "" {
+		return
+	}
+	var payload struct {
+		Emoji string `json:"emoji"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return
+	}
+	if payload.Emoji == "" {
+		return
+	}
+	c.hub.broadcastAll(c.roomId, "reaction-burst", map[string]any{
+		"memberId": c.memberId,
+		"emoji":    payload.Emoji,
+	})
 }

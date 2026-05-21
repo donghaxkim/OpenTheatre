@@ -190,4 +190,31 @@ var _ = Describe("V1 WebSocket", func() {
 			Expect(msg["type"]).To(Equal("typing-stop"))
 		})
 	})
+
+	Describe("reaction-burst", func() {
+		It("broadcasts burst to all clients including the sender", func() {
+			conn1, _ := dialV1Ws(srv.URL, room.Id)
+			defer conn1.Close()
+			conn1.WriteMessage(websocket.TextMessage, []byte(
+				`{"type":"join","data":{"member":{"id":"m_alex","displayName":"Alex"}}}`))
+			readV1Msg(conn1)
+
+			conn2, _ := dialV1Ws(srv.URL, room.Id)
+			defer conn2.Close()
+			conn2.WriteMessage(websocket.TextMessage, []byte(
+				`{"type":"join","data":{"member":{"id":"m_bob","displayName":"Bob"}}}`))
+			readV1Msg(conn2)
+			readV1Msg(conn1)
+
+			conn1.WriteMessage(websocket.TextMessage, []byte(
+				`{"type":"reaction-burst","data":{"emoji":"🔥"}}`))
+
+			msg, err := readV1Msg(conn2)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(msg["type"]).To(Equal("reaction-burst"))
+			data := msg["data"].(map[string]any)
+			Expect(data["memberId"]).To(Equal("m_alex"))
+			Expect(data["emoji"]).To(Equal("🔥"))
+		})
+	})
 })

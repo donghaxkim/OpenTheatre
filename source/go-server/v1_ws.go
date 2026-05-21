@@ -141,6 +141,8 @@ func (c *v1WsClient) readPump() {
 		switch env.Type {
 		case "join":
 			c.handleJoin(env.Data)
+		case "chat":
+			c.handleChat(env.Data)
 		}
 	}
 }
@@ -276,4 +278,27 @@ func (h *v1WsHub) onClientGone(c *v1WsClient) {
 			"memberId": c.memberId,
 		})
 	}
+}
+
+// handleChat appends a chat message to the room buffer and broadcasts it to
+// all clients in the room (including sender, as confirmation).
+func (c *v1WsClient) handleChat(data json.RawMessage) {
+	if c.memberId == "" {
+		return
+	}
+	var payload struct {
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return
+	}
+	if payload.Text == "" {
+		return
+	}
+	room, ok := c.hub.v1Srv.GetRoom(c.roomId)
+	if !ok {
+		return
+	}
+	msg := room.AppendChat(c.memberId, payload.Text)
+	c.hub.broadcastAll(c.roomId, "chat", map[string]any{"message": msg})
 }

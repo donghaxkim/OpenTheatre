@@ -1,6 +1,9 @@
 package main
 
 import (
+	"fmt"
+	"strings"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -106,6 +109,45 @@ var _ = Describe("V1Room", func() {
 				ids = append(ids, m.Id)
 			}
 			Expect(ids).To(ConsistOf("m_alex", "m_bob"))
+		})
+	})
+
+	Describe("Chat ring buffer", func() {
+		It("AppendChat stores the message with id + timestamp", func() {
+			room := NewV1Room("B3K7M9", "n", "m_alex")
+			msg := room.AppendChat("m_alex", "hello")
+			Expect(msg.Id).ToNot(BeEmpty())
+			Expect(msg.MemberId).To(Equal("m_alex"))
+			Expect(msg.Text).To(Equal("hello"))
+			Expect(msg.Timestamp).To(BeNumerically(">", 0))
+		})
+
+		It("ChatHistory returns all messages in order", func() {
+			room := NewV1Room("B3K7M9", "n", "m_alex")
+			room.AppendChat("m_a", "first")
+			room.AppendChat("m_b", "second")
+			room.AppendChat("m_c", "third")
+			history := room.ChatHistory()
+			Expect(history).To(HaveLen(3))
+			Expect(history[0].Text).To(Equal("first"))
+			Expect(history[2].Text).To(Equal("third"))
+		})
+
+		It("ChatHistory retains only the last 100 messages", func() {
+			room := NewV1Room("B3K7M9", "n", "m_alex")
+			for i := 0; i < 150; i++ {
+				room.AppendChat("m_a", fmt.Sprintf("msg %d", i))
+			}
+			history := room.ChatHistory()
+			Expect(history).To(HaveLen(100))
+			Expect(history[0].Text).To(Equal("msg 50"))
+			Expect(history[99].Text).To(Equal("msg 149"))
+		})
+
+		It("AppendChat caps text at 500 characters", func() {
+			room := NewV1Room("B3K7M9", "n", "m_alex")
+			msg := room.AppendChat("m_alex", strings.Repeat("a", 600))
+			Expect(msg.Text).To(HaveLen(500))
 		})
 	})
 })

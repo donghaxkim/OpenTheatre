@@ -4,6 +4,8 @@ import (
 	"errors"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // V1Room is the OpenTheatre v1 room model. Lives in memory only.
@@ -163,5 +165,42 @@ func (r *V1Room) MemberList() []V1Member {
 	for _, entry := range r.members {
 		out = append(out, entry.member)
 	}
+	return out
+}
+
+// v1ChatBufferSize is the per-room cap on retained chat messages.
+const v1ChatBufferSize = 100
+
+// v1MaxChatTextLen is the per-message server-enforced cap.
+const v1MaxChatTextLen = 500
+
+// AppendChat appends a message to the ring buffer and returns the stored
+// message with server-stamped Id and Timestamp. Text is truncated to
+// v1MaxChatTextLen.
+func (r *V1Room) AppendChat(memberId, text string) V1ChatMessage {
+	if len(text) > v1MaxChatTextLen {
+		text = text[:v1MaxChatTextLen]
+	}
+	msg := V1ChatMessage{
+		Id:        uuid.New().String(),
+		MemberId:  memberId,
+		Text:      text,
+		Timestamp: time.Now().UnixMilli(),
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.chat = append(r.chat, msg)
+	if len(r.chat) > v1ChatBufferSize {
+		r.chat = r.chat[len(r.chat)-v1ChatBufferSize:]
+	}
+	return msg
+}
+
+// ChatHistory returns an ordered snapshot copy of the chat ring buffer.
+func (r *V1Room) ChatHistory() []V1ChatMessage {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]V1ChatMessage, len(r.chat))
+	copy(out, r.chat)
 	return out
 }

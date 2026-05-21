@@ -10,6 +10,7 @@ import (
 	"math/rand"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/OpenTheatre/OpenTheatre/internal/qps"
 	"github.com/unrolled/render"
@@ -45,20 +46,26 @@ type slashFix struct {
 	render *render.Render
 	mux    http.Handler
 	vtSrv  *OpenTheatreService
+	v1Srv  *V1Service
 	qps    *qps.QP
 
 	rpClient *http.Client
+
+	v1WsOnce sync.Once
+	v1Ws     *v1WsHub
 }
 
 func newSlashFix(
 	render *render.Render,
 	vtSrv *OpenTheatreService,
+	v1Srv *V1Service,
 	qps *qps.QP,
 	rpClient *http.Client,
 ) *slashFix {
 	s := &slashFix{
 		render:   render,
 		vtSrv:    vtSrv,
+		v1Srv:    v1Srv,
 		qps:      qps,
 		rpClient: rpClient,
 	}
@@ -77,6 +84,10 @@ func newSlashFix(
 	// don't rely on beta APIs
 	mux.HandleFunc("/beta/admin", s.handleBetaAdmin)
 	mux.HandleFunc("/beta/counter", s.handleCounter)
+
+	mux.HandleFunc("/v1/rooms", s.handleV1Rooms)
+	mux.HandleFunc("/v1/rooms/", s.handleV1RoomById)
+	mux.HandleFunc("/v1/ws/", s.handleV1Ws)
 
 	wsHub := newWsHub(vtSrv, qps)
 	go wsHub.run()

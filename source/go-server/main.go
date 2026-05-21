@@ -68,9 +68,11 @@ func main() {
 	Init()
 	_ = os.WriteFile("admin_password.txt", []byte(adminPassword), 0644)
 	vtSrv := NewOpenTheatreService(time.Minute * 3)
+	v1Srv := NewV1Service()
 	server := newSlashFix(
 		render.New(),
 		vtSrv,
+		v1Srv,
 		qps.NewQP(time.Second, 3600),
 		&http.Client{},
 	)

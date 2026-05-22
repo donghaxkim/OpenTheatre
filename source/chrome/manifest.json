@@ -43,6 +43,7 @@
                 "ot/profile.js",
                 "ot/ws-client.js",
                 "ot/sidebar.js",
+                "ot/overlay.js",
                 "ot/content.js"
             ],
             "run_at": "document_idle"

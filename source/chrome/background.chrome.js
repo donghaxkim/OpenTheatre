@@ -477,5 +477,27 @@ getBrowser().runtime.onMessage.addListener(function (msgText, sender, sendRespon
                 sendResponse({ error: 0 })
             }).catch(r => sendResponse({ error: r }));
             return true;
+        // 5001: popup asks background to create a room on the server.
+        // msg.member = {id, displayName, avatarColor}. Replies {roomId} or {error}.
+        case 5001:
+            fetch("http://localhost:5001/v1/rooms", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ member: msg.member })
+            })
+                .then(r => r.ok ? r.json() : Promise.reject("create failed " + r.status))
+                .then(j => sendResponse({ roomId: j.roomId }))
+                .catch(e => sendResponse({ error: String(e) }));
+            return true;
+        // 5002: popup asks background to route a roomId into the active tab's
+        // content script. msg.roomId, msg.member. Sends 5003 to that tab.
+        case 5002:
+            getBrowser().tabs.query({ active: true, currentWindow: true }, (tabs) => {
+                if (!tabs[0]) { sendResponse({ error: "no active tab" }); return; }
+                getBrowser().tabs.sendMessage(tabs[0].id,
+                    JSON.stringify({ type: 5003, roomId: msg.roomId, member: msg.member }));
+                sendResponse({ ok: true });
+            });
+            return true;
     }
 });

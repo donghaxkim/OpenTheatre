@@ -33,6 +33,19 @@
             "run_at": "document_start",
             "all_frames": true,
             "world": "MAIN"
+        },
+        {
+            "matches": [
+                "<all_urls>"
+            ],
+            "js": [
+                "ot/shadow-host.js",
+                "ot/profile.js",
+                "ot/ws-client.js",
+                "ot/sidebar.js",
+                "ot/content.js"
+            ],
+            "run_at": "document_idle"
         }
     ],
     "web_accessible_resources": [
@@ -41,7 +54,8 @@
                 "vt.en-us.user.js",
                 "vt.zh-cn.user.js",
                 "vt.ja-jp.user.js",
-                "preInjected.js"
+                "preInjected.js",
+                "ot/tokens.css"
             ],
             "matches": [
                 "<all_urls>"

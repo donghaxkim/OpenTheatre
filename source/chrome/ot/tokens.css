@@ -1,8 +1,10 @@
 /* OpenTheatre v2 design tokens — extracted verbatim from
    docs/design/mockup.html :root. The single source of colour, motion,
    and type for the popup and the injected sidebar.
-   Principle: monochrome chrome; the --p-* people palette is the only colour. */
-:root {
+   Principle: monochrome chrome; the --p-* people palette is the only colour.
+   Selector is ":root, :host" so the tokens resolve both in the popup document
+   (:root = <html>) and inside the injected sidebar's shadow root (:host). */
+:root, :host {
   /* the single neutral — one warm-leaning charcoal, never blue-black */
   --bg:        #1a1917;
   --bg-deep:   #121110;

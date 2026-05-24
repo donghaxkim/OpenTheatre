@@ -29,9 +29,6 @@
     --text-dim:  #9d9b95;
     --text-faint:#6b6862;
 
-    /* the one non-hued bright surface: the primary action */
-    --solid:     #f4f3f0;
-
     /* --- the people palette — the ONLY color in the whole app --- */
     --p-clay:  #c8695b;
     --p-ochre: #cf9a52;
@@ -126,10 +123,31 @@
   }
 
   /* header */
-  .head { padding: 15px 14px 13px; border-bottom: 1px solid var(--line); }
+  .head { position: relative; padding: 15px 14px 13px; border-bottom: 1px solid var(--line); }
   .head-top { display: flex; align-items: center; gap: 8px; }
-  .room-name { flex: 1; font-size: 14px; font-weight: 600; letter-spacing: -.01em;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* room name — double-click to rename (host only in the product).
+     a box + pencil appear on hover to signal it is editable */
+  .room-name-box {
+    margin: -3px auto -3px -6px;
+    min-width: 0; display: flex; align-items: center; gap: 4px;
+    padding: 3px 6px; border-radius: 6px;
+    border: 1px solid transparent; cursor: pointer;
+    transition: background .15s var(--ease), border-color .15s var(--ease);
+  }
+  .room-name-box:hover { background: var(--surface); border-color: var(--line-2); }
+  .room-name-box.editing { background: var(--bg); border-color: var(--text-faint); cursor: text; }
+  .room-name {
+    min-width: 0; font-size: 14px; font-weight: 600; letter-spacing: -.01em;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; outline: none;
+  }
+  .room-name.editing { text-overflow: clip; }
+  .rename-hint {
+    width: 13px; height: 13px; flex: none; color: var(--text-faint);
+    opacity: 0; transform: scale(.7);
+    transition: opacity .15s var(--ease), transform .15s var(--ease);
+  }
+  .room-name-box:hover .rename-hint { opacity: 1; transform: scale(1); }
+  .room-name-box.editing .rename-hint { opacity: 0; }
   .ghost {
     width: 28px; height: 28px; flex: none; border: none; background: transparent;
     border-radius: 7px; color: var(--text-faint);
@@ -137,35 +155,113 @@
   }
   .ghost:hover { background: var(--surface-2); color: var(--text); }
   .ghost:active { transform: scale(.94); }
+  .ghost.copied { color: var(--text); }
   .ghost svg { width: 16px; height: 16px; }
+
+  /* invite confirmation: the icon scales away while a "copied" box
+     scales in over the same spot, then it reverts */
+  #inviteBtn { position: relative; }
+  #inviteBtn > svg {
+    transition: opacity .16s var(--ease), transform .16s var(--ease);
+  }
+  #inviteBtn.copied > svg { opacity: 0; transform: scale(.6); }
+  .copied-flag {
+    position: absolute; top: 50%; right: 0; z-index: 5;
+    display: flex; align-items: center; gap: 5px; white-space: nowrap;
+    padding: 5px 9px; border-radius: 7px;
+    background: var(--surface-2); border: 1px solid var(--line-2);
+    color: var(--text); font-size: 11px; font-weight: 500;
+    pointer-events: none;
+    opacity: 0; transform: translateY(-50%) scale(.85);
+    transform-origin: right center;
+    transition: opacity .2s var(--ease), transform .2s var(--ease);
+  }
+  #inviteBtn.copied .copied-flag { opacity: 1; transform: translateY(-50%) scale(1); }
+  .copied-flag svg { width: 12px; height: 12px; flex: none; }
   .head-meta { display: flex; align-items: center; gap: 8px; margin-top: 7px; }
   .code {
     font-family: var(--mono); font-size: 11px; letter-spacing: .14em;
     color: var(--text-dim); background: var(--surface);
     border: 1px solid var(--line); border-radius: 5px; padding: 2px 7px;
   }
-  /* copy-the-invite-link control: the room code, made tappable.
-     two overlapping squares = copy; it swaps to a check on success.
-     feedback stays monochrome — no hue, per "people are the only colour". */
-  .code-copy {
-    display: inline-flex; align-items: center; gap: 6px;
+  /* the room-code chip, made copyable: click copies the bare code,
+     the label swaps to a check + "Copied", then reverts */
+  .code-chip {
+    display: inline-grid; align-items: center; justify-items: center;
     font-family: var(--mono); font-size: 11px; letter-spacing: .14em;
     color: var(--text-dim); background: var(--surface);
     border: 1px solid var(--line); border-radius: 5px; padding: 3px 8px;
     transition: color .18s var(--ease), border-color .18s var(--ease), transform .12s var(--ease);
   }
-  .code-copy:hover { color: var(--text); border-color: var(--line-2); }
-  .code-copy:active { transform: scale(.96); }
-  .code-copy.copied { color: var(--text); border-color: var(--text-faint); }
-  .code-copy svg { width: 12px; height: 12px; flex: none; }
+  .code-chip:hover { color: var(--text); border-color: var(--line-2); }
+  .code-chip:active { transform: scale(.96); }
+  .code-chip.copied { color: var(--text); border-color: var(--text-faint); }
+  .code-chip svg { width: 12px; height: 12px; flex: none; }
+  /* both states share one grid cell: the chip sizes to the wider of
+     them, so it never resizes when it flips to "Copied" */
+  .cc-idle, .cc-done {
+    grid-area: 1 / 1;
+    display: flex; align-items: center; gap: 5px;
+    transition: opacity .15s var(--ease);
+  }
+  .cc-done { opacity: 0; }
+  .code-chip.copied .cc-idle { opacity: 0; }
+  .code-chip.copied .cc-done { opacity: 1; }
+  /* copy feedback: the idle icon swaps to a check on success, then
+     reverts. stays monochrome, no hue, per "people are the only colour". */
   .i-check { display: none; }
   .copied .i-copy { display: none; }
   .copied .i-check { display: inline; }
-  .head-meta .count { font-size: 11.5px; color: var(--text-faint); }
+  .head-meta .count { font-size: 11px; color: var(--text-faint); }
+
+  /* settings panel — drops from the gear; edit your name + colour.
+     chrome stays monochrome; the swatches are the people-palette. */
+  .settings {
+    position: absolute; top: calc(100% + 6px); left: 8px; right: 8px;
+    z-index: 40;
+    background: var(--surface); border: 1px solid var(--line-2);
+    border-radius: 10px; padding: 14px;
+    box-shadow: 0 16px 40px -16px rgba(0,0,0,.7);
+    opacity: 0; visibility: hidden; transform: translateY(-6px);
+    transition: opacity .18s var(--ease), transform .18s var(--ease), visibility .18s;
+  }
+  .settings.open { opacity: 1; visibility: visible; transform: translateY(0); }
+  .settings-top {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 13px;
+  }
+  .settings-title { font-size: 13px; font-weight: 600; }
+  .settings-label {
+    display: block; font-size: 10px; font-weight: 500;
+    letter-spacing: .08em; text-transform: uppercase;
+    color: var(--text-faint); margin-bottom: 8px;
+  }
+  .name-field {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 15px;
+  }
+  .name-field .ava { width: 38px; height: 38px; font-size: 14px; flex: none; }
+  .name-field input {
+    flex: 1; min-width: 0; background: var(--bg);
+    border: 1px solid var(--line-2); border-radius: 8px;
+    padding: 9px 11px; color: var(--text);
+    font-family: var(--font); font-size: 13px; outline: none;
+    transition: border-color .2s ease;
+  }
+  .name-field input:focus { border-color: var(--text-faint); }
+  .swatches { display: flex; justify-content: space-between; }
+  .swatch {
+    width: 28px; height: 28px; border-radius: 50%;
+    border: none; padding: 0; cursor: pointer;
+    transition: transform .15s var(--ease);
+  }
+  .swatch:hover { transform: scale(1.12); }
+  .swatch:active { transform: scale(.94); }
+  .swatch.is-on { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--text); }
 
   /* presence — the hero of the panel */
   .presence {
-    display: flex; gap: 6px; padding: 16px 10px;
+    display: flex; gap: 6px; padding: 16px 14px;
+    justify-content: center;
     border-bottom: 1px solid var(--line); overflow-x: auto;
   }
   .person {
@@ -192,10 +288,10 @@
   .msg .ava { width: 28px; height: 28px; font-size: 11px; }
   .msg-b { min-width: 0; }
   .msg-h { display: flex; align-items: baseline; gap: 7px; margin-bottom: 2px; }
-  .msg-h .who { font-size: 12.5px; font-weight: 600; }
+  .msg-h .who { font-size: 12px; font-weight: 600; }
   .msg-h .t { font-size: 10px; color: var(--text-faint); }
   .msg-x { font-size: 13px; line-height: 1.5; color: var(--text); word-wrap: break-word; }
-  .joined { font-size: 11.5px; color: var(--text-faint); text-align: center; }
+  .joined { font-size: 11px; color: var(--text-faint); text-align: center; }
   .joined b { color: var(--text-dim); font-weight: 500; }
 
   /* empty-room state — near-monochrome, quiet, wants people */
@@ -235,7 +331,7 @@
   .typing span { font-size: 11px; color: var(--text-faint); }
 
   /* reaction row */
-  .reacts { display: flex; gap: 3px; padding: 8px 10px; border-top: 1px solid var(--line); }
+  .reacts { display: flex; gap: 3px; padding: 8px 14px; border-top: 1px solid var(--line); }
   .reacts button {
     flex: 1; height: 32px; border: 1px solid transparent; border-radius: 8px;
     background: transparent; font-size: 16px; transition: all .2s var(--ease);
@@ -245,7 +341,7 @@
   .reacts .more { color: var(--text-faint); font-size: 15px; }
 
   /* composer */
-  .composer { display: flex; gap: 8px; padding: 10px 12px 13px; border-top: 1px solid var(--line); }
+  .composer { display: flex; align-items: center; gap: 8px; padding: 10px 14px 13px; border-top: 1px solid var(--line); }
   .composer .f {
     flex: 1; display: flex; align-items: center; gap: 6px;
     background: var(--surface); border: 1px solid var(--line-2);
@@ -266,69 +362,16 @@
   .send:active { transform: scale(.92); }
   .send svg { width: 15px; height: 15px; }
 
-  /* ============================================================
-     POPUP — calm; the primary action is the one bright surface
-     ============================================================ */
-  .popup {
-    position: absolute; top: 20px; left: 24px; width: 296px; z-index: 50;
-    background: var(--surface); border: 1px solid var(--line-2);
-    border-radius: 14px; padding: 18px;
-    box-shadow: 0 16px 50px -14px rgba(0,0,0,.7);
-  }
-  .wordmark { font-size: 12px; font-weight: 600; letter-spacing: .02em;
-    color: var(--text-dim); margin-bottom: 15px; }
-  .wordmark b { color: var(--text); font-weight: 600; }
-
-  .me { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
-  .me .ava { width: 36px; height: 36px; font-size: 14px; }
-  .me .info { flex: 1; }
-  .me .info b { display: block; font-size: 13.5px; font-weight: 600; }
-  .me .info small { font-size: 11px; color: var(--text-faint); }
-
-  .start {
-    width: 100%; padding: 12px; border: none; border-radius: 10px;
-    background: var(--solid); color: #17150f;
-    font-size: 13.5px; font-weight: 600; letter-spacing: -.005em;
-    transition: transform .18s var(--ease), opacity .2s ease;
-  }
-  .start:hover { opacity: .92; }
-  .start:active { transform: scale(.98); }
-
-  .div { display: flex; align-items: center; gap: 10px; margin: 13px 0;
-    color: var(--text-faint); font-size: 11px; }
-  .div::before, .div::after { content: ""; flex: 1; height: 1px; background: var(--line); }
-
-  .join { display: flex; gap: 7px; }
-  .join input {
-    flex: 1; background: var(--bg); border: 1px solid var(--line-2);
-    border-radius: 9px; padding: 10px 12px; color: var(--text);
-    font-family: var(--mono); font-size: 15px; letter-spacing: .2em;
-    text-transform: uppercase; outline: none; transition: border-color .2s ease;
-  }
-  .join input:focus { border-color: var(--text-faint); }
-  .join input::placeholder { color: var(--text-faint); letter-spacing: .12em; }
-  .join button {
-    padding: 0 15px; border: 1px solid var(--line-2); border-radius: 9px;
-    background: transparent; color: var(--text-dim);
-    font-size: 12.5px; font-weight: 500; transition: all .2s var(--ease);
-  }
-  .join button:hover { color: var(--text); border-color: var(--text-faint); }
-  .join button:active { transform: scale(.96); }
-
-  /* entrance — calm, short, no drama */
-  .in { opacity: 0; transform: translateY(8px); animation: in .5s var(--ease) forwards; }
-  @keyframes in { to { opacity: 1; transform: none; } }
-
   /* demo control */
   .demo {
     position: absolute; bottom: 16px; left: 24px; z-index: 60;
     display: flex; align-items: center; gap: 8px;
-    font-size: 11.5px; color: var(--text-faint);
+    font-size: 11px; color: var(--text-faint);
   }
   .demo button {
     background: var(--surface-2); border: 1px solid var(--line-2);
     color: var(--text-dim); border-radius: 7px; padding: 6px 11px;
-    font-size: 11.5px; font-weight: 500; transition: all .2s var(--ease);
+    font-size: 11px; font-weight: 500; transition: all .2s var(--ease);
   }
   .demo button:hover { color: var(--text); }
   .demo button:active { transform: scale(.96); }
@@ -351,8 +394,18 @@
     <aside class="sidebar">
       <div class="head">
         <div class="head-top">
-          <span class="room-name">Marcus's room</span>
-          <button class="ghost" title="Settings">
+          <div class="room-name-box" id="roomNameBox" title="Double-click to rename">
+            <span class="room-name" id="roomName">Marcus's room</span>
+            <svg class="rename-hint" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+          </div>
+          <button class="ghost" id="inviteBtn" title="Copy invite link">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>
+            <span class="copied-flag">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>
+              Link copied
+            </span>
+          </button>
+          <button class="ghost" id="gearBtn" title="Settings">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9z"/></svg>
           </button>
           <button class="ghost" title="Collapse">
@@ -360,12 +413,39 @@
           </button>
         </div>
         <div class="head-meta">
-          <button class="code-copy" id="copyHead" title="Copy invite link" data-idle="B3K7M9">
-            <svg class="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-            <svg class="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>
-            <span class="i-label">B3K7M9</span>
+          <button class="code-chip" id="copyCode" data-copy="B3K7M9" title="Copy room code">
+            <span class="cc-idle">B3K7M9</span>
+            <span class="cc-done" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>
+              Copied
+            </span>
           </button>
           <span class="count" id="count">4 here</span>
+        </div>
+
+        <div class="settings" id="settings">
+          <div class="settings-top">
+            <span class="settings-title">Settings</span>
+            <button class="ghost" id="settingsClose" title="Close">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <label class="settings-label" for="nameInput">Display name</label>
+          <div class="name-field">
+            <div class="ava" id="profilePreview" style="background:var(--p-ochre)">Y</div>
+            <input id="nameInput" maxlength="20" value="you" autocomplete="off" />
+          </div>
+          <span class="settings-label">Color</span>
+          <div class="swatches" id="swatches">
+            <button class="swatch is-on" data-c="--p-ochre" style="background:var(--p-ochre)" title="Ochre"></button>
+            <button class="swatch" data-c="--p-clay" style="background:var(--p-clay)" title="Clay"></button>
+            <button class="swatch" data-c="--p-sand" style="background:var(--p-sand)" title="Sand"></button>
+            <button class="swatch" data-c="--p-olive" style="background:var(--p-olive)" title="Olive"></button>
+            <button class="swatch" data-c="--p-teal" style="background:var(--p-teal)" title="Teal"></button>
+            <button class="swatch" data-c="--p-denim" style="background:var(--p-denim)" title="Denim"></button>
+            <button class="swatch" data-c="--p-plum" style="background:var(--p-plum)" title="Plum"></button>
+            <button class="swatch" data-c="--p-rose" style="background:var(--p-rose)" title="Rose"></button>
+          </div>
         </div>
       </div>
 
@@ -380,8 +460,8 @@
           <span class="nm">Priya</span>
         </div>
         <div class="person">
-          <div class="ava" style="background:var(--p-ochre)">Y</div>
-          <span class="nm">you</span>
+          <div class="ava" data-you="ava" style="background:var(--p-ochre)">Y</div>
+          <span class="nm" data-you="name">you</span>
         </div>
         <div class="person away">
           <div class="ava" style="background:var(--p-clay)">S</div>
@@ -407,9 +487,9 @@
           </div>
         </div>
         <div class="msg">
-          <div class="ava" style="background:var(--p-ochre)">Y</div>
+          <div class="ava" data-you="ava" style="background:var(--p-ochre)">Y</div>
           <div class="msg-b">
-            <div class="msg-h"><span class="who" style="color:var(--p-ochre)">you</span><span class="t">9:15</span></div>
+            <div class="msg-h"><span class="who" data-you="name" style="color:var(--p-ochre)">you</span><span class="t">9:15</span></div>
             <div class="msg-x">wait who paused it 😭</div>
           </div>
         </div>
@@ -458,24 +538,6 @@
       </div>
     </aside>
 
-    <!-- popup -->
-    <div class="popup in" style="animation-delay:.1s">
-      <div class="wordmark">Open<b>Theatre</b></div>
-      <div class="me">
-        <div class="ava" style="background:var(--p-ochre)">Y</div>
-        <div class="info"><b>you</b><small>tap to change name &amp; color</small></div>
-        <button class="ghost" title="Edit">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
-        </button>
-      </div>
-      <button class="start">Start watching together</button>
-      <div class="div">or join with a code</div>
-      <div class="join">
-        <input maxlength="6" placeholder="B3K7M9" />
-        <button>Join</button>
-      </div>
-    </div>
-
     <div class="demo">
       <span>demo —</span>
       <button id="toggle">show empty room</button>
@@ -502,23 +564,26 @@
   document.querySelectorAll('#reacts button[data-e]').forEach(b =>
     b.addEventListener('click', () => burst(b.dataset.e)));
 
-  /* copy invite link — the two-squares icon swaps to a check on success */
+  /* copy controls — invite button + empty-state copy the share link;
+     the header code chip copies the bare room code. data-copy says which. */
   const SHARE_LINK = 'https://opentheatre.app/r/B3K7M9';
   function wireCopy(btn) {
     if (!btn) return;
     const label = btn.querySelector('.i-label');
     btn.addEventListener('click', () => {
-      if (navigator.clipboard) navigator.clipboard.writeText(SHARE_LINK).catch(() => {});
+      const text = btn.dataset.copy || SHARE_LINK;
+      if (navigator.clipboard) navigator.clipboard.writeText(text).catch(() => {});
       btn.classList.add('copied');
-      label.textContent = 'Copied';
+      if (label) label.textContent = 'Copied';
       clearTimeout(btn._t);
       btn._t = setTimeout(() => {
         btn.classList.remove('copied');
-        label.textContent = btn.dataset.idle;
+        if (label) label.textContent = btn.dataset.idle;
       }, 1600);
     });
   }
-  wireCopy(document.getElementById('copyHead'));
+  wireCopy(document.getElementById('inviteBtn'));
+  wireCopy(document.getElementById('copyCode'));
   wireCopy(document.getElementById('copyEmpty'));
 
   /* toggle full <-> empty room to show "people are the colour" */
@@ -535,6 +600,84 @@
     // in the empty room, only you remain — the panel drains of colour
     [...presence.children].forEach((p,i) => p.style.display = (full || i===2) ? 'flex' : 'none');
     toggle.textContent = full ? 'show empty room' : 'show full room';
+  });
+
+  /* settings panel — edit your display name + colour, applied live */
+  const settings = document.getElementById('settings'),
+        gearBtn = document.getElementById('gearBtn'),
+        settingsClose = document.getElementById('settingsClose'),
+        swatches = document.getElementById('swatches'),
+        nameInput = document.getElementById('nameInput'),
+        profilePreview = document.getElementById('profilePreview');
+
+  gearBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    settings.classList.toggle('open');
+  });
+  settingsClose.addEventListener('click', () => settings.classList.remove('open'));
+  document.addEventListener('click', e => {
+    if (!settings.contains(e.target)) settings.classList.remove('open');
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') settings.classList.remove('open');
+  });
+
+  /* one choice ripples through every element tagged as "you" */
+  function applyColour(cssVar) {
+    const c = `var(${cssVar})`;
+    profilePreview.style.background = c;
+    document.querySelectorAll('[data-you="ava"]').forEach(a => a.style.background = c);
+    document.querySelectorAll('.who[data-you="name"]').forEach(w => w.style.color = c);
+  }
+  function applyName(raw) {
+    const name = raw.trim();
+    const initial = (name[0] || '?').toUpperCase();
+    profilePreview.textContent = initial;
+    document.querySelectorAll('[data-you="ava"]').forEach(a => a.textContent = initial);
+    document.querySelectorAll('[data-you="name"]').forEach(n => n.textContent = name || 'you');
+  }
+
+  swatches.querySelectorAll('.swatch').forEach(s => {
+    s.addEventListener('click', () => {
+      const cur = swatches.querySelector('.is-on');
+      if (cur) cur.classList.remove('is-on');
+      s.classList.add('is-on');
+      applyColour(s.dataset.c);
+    });
+  });
+  nameInput.addEventListener('input', () => applyName(nameInput.value));
+
+  /* room name — double-click to rename (host) */
+  const roomNameBox = document.getElementById('roomNameBox'),
+        roomName = document.getElementById('roomName');
+  let savedName = roomName.textContent.trim();
+
+  roomNameBox.addEventListener('dblclick', () => {
+    if (roomName.isContentEditable) return;
+    savedName = roomName.textContent.trim();
+    roomNameBox.classList.add('editing');
+    roomName.classList.add('editing');
+    roomName.setAttribute('contenteditable', 'true');
+    roomName.focus();
+    const range = document.createRange();
+    range.selectNodeContents(roomName);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  });
+  function endRename() {
+    roomName.removeAttribute('contenteditable');
+    roomNameBox.classList.remove('editing');
+    roomName.classList.remove('editing');
+    roomName.textContent = roomName.textContent.trim() || savedName;
+    window.getSelection().removeAllRanges();
+  }
+  roomName.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); roomName.blur(); }
+    else if (e.key === 'Escape') { e.preventDefault(); roomName.textContent = savedName; roomName.blur(); }
+  });
+  roomName.addEventListener('blur', () => {
+    if (roomNameBox.classList.contains('editing')) endRename();
   });
 </script>
 </body>

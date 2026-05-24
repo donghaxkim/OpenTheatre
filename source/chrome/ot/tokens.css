@@ -1,0 +1,34 @@
+/* OpenTheatre v2 design tokens — extracted verbatim from
+   docs/design/mockup.html :root. The single source of colour, motion,
+   and type for the popup and the injected sidebar.
+   Principle: monochrome chrome; the --p-* people palette is the only colour.
+   Selector is ":root, :host" so the tokens resolve both in the popup document
+   (:root = <html>) and inside the injected sidebar's shadow root (:host). */
+:root, :host {
+  /* the single neutral — one warm-leaning charcoal, never blue-black */
+  --bg:        #1a1917;
+  --bg-deep:   #121110;
+  --surface:   #211f1d;
+  --surface-2: #2a2825;
+
+  --line:      rgba(237,237,235,.075);
+  --line-2:    rgba(237,237,235,.14);
+
+  --text:      #ededeb;
+  --text-dim:  #9d9b95;
+  --text-faint:#6b6862;
+
+  /* --- the people palette — the ONLY colour in the whole app --- */
+  --p-clay:  #c8695b;
+  --p-ochre: #cf9a52;
+  --p-olive: #8f9f5e;
+  --p-teal:  #5fa08f;
+  --p-denim: #6b91c4;
+  --p-plum:  #a87fb0;
+  --p-rose:  #cd7f9c;
+  --p-sand:  #b08968;
+
+  --ease: cubic-bezier(.32,.72,0,1);
+  --font: "Geist", system-ui, sans-serif;
+  --mono: "Geist Mono", ui-monospace, monospace;
+}

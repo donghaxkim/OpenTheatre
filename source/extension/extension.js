@@ -515,15 +515,25 @@
         (document.body || document.documentElement).appendChild(script);
     }
 
-    let wrapper = document.createElement("div");
-    wrapper.innerHTML = `{{{ {"user": "./html/loading.html", "order":1} }}}`;
-    (document.body || document.documentElement).appendChild(wrapper);
-    let script = document.createElement('script');
-    script.type = 'text/javascript';
-
-    if (isExtension) {
-        script.src = getBrowser().runtime.getURL(`vt.${language}.user.js`);
-        (document.body || document.documentElement).appendChild(script);
+    // The v2 client (ot/*.js, content script in the isolated world)
+    // supersedes the legacy VideoTogether panel. vt.js is no longer
+    // injected during v2 development: its UI is unwanted, its sync engine
+    // is not yet wired to v1 rooms, and on Trusted-Types-strict sites like
+    // YouTube its updateInnnerHTML fallback throws because the page CSP
+    // disallows creating custom policies. Flip OT_INJECT_LEGACY_VT to true
+    // to restore the legacy injection. Video sync (Slice 6) will introduce
+    // a headless sync path that does not need the legacy panel UI.
+    const OT_INJECT_LEGACY_VT = false;
+    if (OT_INJECT_LEGACY_VT) {
+        let wrapper = document.createElement("div");
+        wrapper.innerHTML = `{{{ {"user": "./html/loading.html", "order":1} }}}`;
+        (document.body || document.documentElement).appendChild(wrapper);
+        let script = document.createElement('script');
+        script.type = 'text/javascript';
+        if (isExtension) {
+            script.src = getBrowser().runtime.getURL(`vt.${language}.user.js`);
+            (document.body || document.documentElement).appendChild(script);
+        }
     }
 
 
